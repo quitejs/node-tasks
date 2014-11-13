@@ -1,8 +1,8 @@
 {
-  "name": "tasks",
+  "name": "quite-tasks",
   "version": "0.0.1",
   "description": "",
-  "main": "index.js",
+  "main": "dist/tasks.js",
   "directories": {
     "test": "test"
   },

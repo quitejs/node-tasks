@@ -1,0 +1,11 @@
+T = require './tasks'
+fs = require 'fs'
+T.parallel(
+    for file in ['tasks.cf', 'example.cf', 'file3']
+          T fs.stat, file
+).run (err, results) =>
+  for result in results
+    if result
+      console.log result.size
+    else
+      console.log 'file not exist'
