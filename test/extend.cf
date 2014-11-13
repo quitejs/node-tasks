@@ -1,0 +1,44 @@
+assert = require 'assert'
+_ = require 'underscore'
+T = require 'tasks'
+assert = require 'assert'
+
+module.exports = class TestExtend
+
+  func1: (cb) =>
+    setTimeout =>
+      @progress.push 'one'
+      cb(null, 'one')
+    , 170
+
+  _func2: (cb) =>
+    setTimeout =>
+      @progress.push 'two'
+      cb(null, 'two')
+    , 100
+
+  _func3 : (a,b, cb) =>
+    setTimeout =>
+      @progress.push "three"
+      cb(null, "three")
+    , 390
+
+  _func4: (cb) =>
+    setTimeout =>
+      @progress.push 'four'
+      cb(null, 'four')
+    , 250
+  _makeErr : (cb) =>
+    setTimeout =>
+      @progress.push "err"
+      cb new Error('an error occured'), 'err'
+    , 200
+
+
+  _hasArg: (arg1, arg2, cb) =>
+    setTimeout =>
+      result = arg1 + arg2
+      @progress.push result
+      cb null, result
+    , 50
+

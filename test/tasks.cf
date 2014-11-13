@@ -1,0 +1,171 @@
+assert = require 'assert'
+_ = require 'underscore'
+T = require '../tasks'
+assert = require 'assert'
+
+module.exports = class TestBase
+  constructor: ->
+    @progress = []
+
+  parallel: ->
+    order = ['one', 'two', 'three', 'four']
+    timeOrder = ['two', 'one', 'four', 'three']
+    T.parallel(
+      @_func1
+      @_func2
+      T @_func3, 4,9
+      @_func4
+    ).run (err, results) =>
+      if err
+        console.log 'err', err
+      assert not err
+      assert.deepEqual results, order
+      assert.deepEqual @progress, timeOrder
+
+  series: ->
+    order = ['one', 'two', 'three', 'four']
+    T.series(
+      @_func1
+      @_func2
+      T @_func3, 4,9
+      @_func4
+    ).run (err, results) =>
+      if err
+        console.log 'err', err
+      assert not err
+      assert.deepEqual results, order
+      assert.deepEqual @progress, order
+
+  # when an error occur or got the goal , then break
+  break: ->
+    order = ['one', 'two', 'three']
+    T.series(
+      @_func1
+      @_func2
+      T @_func3, 4, 9, (err, result) ->
+        if result is 'three'
+          # return 
+          [err, result]
+      @_func4
+    ).run (err, results) =>
+      if err
+        console.log 'err', err
+      assert not err
+      assert.deepEqual results, 'three'
+      assert.deepEqual @progress, order
+
+  composite: ->
+    resultOrder = ['three', ['one', 'two'], 'four']
+    timeOrder = ['three', 'two', 'one', 'four']
+    T.series(
+      T @_func3, 4, 9
+      T T.parallel(
+        @_func1
+        @_func2
+      ).run
+      @_func4
+    ).run (err, results) =>
+      assert.ok not err
+      assert.deepEqual results, resultOrder
+      assert.deepEqual @progress, timeOrder
+
+  depends: ->
+    T.series(
+      one = T @_func1
+      T @_depend, one
+    ).run (err, results) ->
+      assert.ok not err
+      console.log results
+
+  depends2: ->
+    T.series(
+      one = T @_func1, (err, result) ->
+        console.log one.result
+        one.result = 'two'
+      T @_depend, one
+    ).run (err, results) ->
+      assert.ok not err
+      console.log results
+
+  depends3: ->
+
+  breakOff: ->
+    T.series(
+      one = T @_func1, (err, result, cb) ->
+        cb new Error 'error occured'
+      T @_depend, one
+    ).run (err, results) ->
+      assert.ok err
+      console.log results
+
+  err: ->
+    T.parallel(
+      @_func1
+      @_func2
+      @_makeErr
+      @_func4
+    ).run (err, results) ->
+      console.log results
+      assert.ok err
+  errIgnore: ->
+    T.parallel(
+      @_func1
+      @_func2
+      @_makeErr
+      @_func4
+    ).ignoreErr().run (err, results) ->
+      console.log results
+      assert.ok err
+
+
+  limit: ->
+    timeOrder = ['one', 'two', 'three', 'four']
+    T.parallel(
+      @_func1
+      T @_func3, 4,9
+      @_func2
+      @_func4
+    ).limit(2).run (err, results) =>
+      if err
+        console.log 'err', err
+      console.log @progress
+      assert not err
+      # assert.deepEqual results, order
+      assert.deepEqual @progress, timeOrder
+
+  circle: ->
+
+  _func1: (cb) =>
+    setTimeout =>
+      @progress.push 'one'
+      cb(null, 'one')
+    , 170
+
+  _func2: (cb) =>
+    setTimeout =>
+      @progress.push 'two'
+      cb(null, 'two')
+    , 100
+
+  _func3 : (a,b, cb) =>
+    setTimeout =>
+      @progress.push "three"
+      cb(null, "three")
+    , 390
+
+  _func4: (cb) =>
+    setTimeout =>
+      @progress.push 'four'
+      cb(null, 'four')
+    , 250
+  _makeErr : (cb) =>
+    setTimeout =>
+      @progress.push "err"
+      cb new Error('an error occured'), 'err'
+    , 200
+
+  _depend : (depends, cb) =>
+    setTimeout =>
+      @progress.push 'depend'
+      cb(null, "depends #{depends}")
+    , 150

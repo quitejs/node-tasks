@@ -1,0 +1,167 @@
+_ = require 'underscore'
+
+class Flow
+  constructor: (tasks...) ->
+    @tasks = []
+    @C tasks...
+  C: (tasks...) ->
+    for task in tasks
+      if task instanceof Task
+        @tasks.push task
+      else if task instanceof Array
+        @C task...
+      else if _.isFunction task
+        @C(T task)
+    @
+
+class Parallel extends Flow
+  constructor: ->
+    super
+    @_ignore = false
+
+  limit: (@_limit) =>
+    @
+
+  ignoreErr: ->
+    @_ignoreErr = true
+    @
+
+  run: (cb) =>
+    if @tasks.length is 0
+      cb new Error "tasks is empty"
+    # _.debug @tasks
+    if @_limit 
+      return @_runLimit (cb)
+    results = []
+    count = 0
+    errs = []
+    for task in @tasks
+      count += 1
+      task.run (err, result) =>
+        count -= 1
+        if err 
+          if @_ignoreErr
+            errs.push err
+          else
+            count = 0
+            err = new Error "#{err.message} in #{task}"
+            errs = err
+        if count is 0
+          if errs.length is 0
+            errs = null
+          cb errs, _.pluck @tasks, 'result'
+          
+
+  _runLimit: (cb) ->
+    results = []
+    count = 0
+    order = @_limit
+    next = (err, result) =>
+      count -= 1
+      if order > 0 and (order < @tasks.length)
+        @tasks[order].run next
+        count += 1
+        order += 1
+
+      if count is 0
+        cb null, _.pluck @tasks, 'result'
+      if err and (not @_ignoreErr)
+        cb err, _.pluck @tasks, 'result'
+    for task in @tasks[...@_limit]
+      count += 1
+      task.run next
+
+
+class Series extends Flow
+  constructor: ->
+    super
+    @_circle = false
+  run: (cb) =>
+    # _.debug @tasks
+    index = 0
+    results = []
+    @_seriesRun index, results, cb
+
+  ignoreErr: ->
+    @_ignoreErr = true
+    @
+
+  _seriesRun: (index, results, cb) =>
+    if index is @tasks.length
+      @got = @measurer? results[-1]
+      if @got
+        cb null, results
+      else if @_circle
+        index = 0
+        @_circle -= 1
+      else if @_loop
+        index = 0
+      else
+        cb null, results
+        return
+    
+    task = @tasks[index]
+    task.run (err, result) =>
+      if err and (not @_ignoreErr)
+        return cb err, results
+      results.push result
+      if task.cb
+        task.cb err, result, (error, out) =>
+          if error 
+            err = error
+            return cb error, results
+        if not err
+          index += 1
+          @_seriesRun index, results, cb
+
+      else
+        # if _.isArray signal 
+        #   if signal[0] instanceof Error or signal[0] is null
+        #     [err, result] = signal
+        #     return cb err, result
+        index += 1
+        @_seriesRun index, results, cb
+
+  circle: (@_circle, @measurer) ->
+    if not @_circle or (@_circle < 0)
+      @_loop = true
+    @
+
+class Task
+  constructor: (@func, @args..., @cb) ->
+    if not @func
+      throw new Error "func can't be null, args: #{JSON.stringify @args}"
+
+  toString: ->
+    "executing #{@args.join ' and '}"
+  run: (cb) =>
+    # @func @args..., cb
+    for arg, index in @args
+      if arg instanceof Task
+        @args[index] = arg.result
+    @func @args..., (@err, @result) =>
+      cb @err, @result
+
+    #   if @err
+    #     cb @err
+    #     return
+    #   @cb? @result
+    #   cb? null, @result
+
+T = (task, args..., cb) ->
+  # if cb exist and not a standard callback , then push to args
+  if (cb isnt undefined) and not (_.isFunction(cb) and (cb.length is 2 or cb.length is 3))
+  # if not (_.isFunction(cb) and (cb.length is 2 or cb.length is 3))
+    args.push cb
+    cb = null
+    # cb = ->
+  new Task task, args..., cb
+
+_.extend T, funcs = 
+  series : (tasks...) ->
+    new Series(tasks...)
+
+  parallel : (tasks...)->
+    new Parallel(tasks...)
+
+module.exports = T
